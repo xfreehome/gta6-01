@@ -1,79 +1,171 @@
-// The screenshot scenes behind ?shot=start|play|end. Each one plays the real rules forward from a
-// fresh world for a fixed number of steps, steered by a simple autopilot (look ahead each way the
-// paddle could move, keep clear of blocks, chase the lowest coin when that is safe), so the frame
-// is what a short game really looks like and the same seed always gives the same frame.
-import { FIELD, PLAYER, STEP } from './config.js';
-import { EVENT_OVER, KIND_BLOCK } from './world.js';
-import { SCREEN_OVER, SCREEN_PLAY, SCREEN_TITLE } from './render.js';
+// Screenshot scenes behind ?shot=chaos|onfoot|roadblock|results.
+// Each one drives the real rules forward with a simple autopilot (steal a car, drive
+// to the malecon, survive), then freezes the exact frame the brief asks for.
+import { CFG, DIALOG } from './config.js';
+import { stepWorld, resetWorld } from './world.js';
+import { explodeCar } from './vehicles.js';
+import { spawnExplosion } from './render3d.js';
 
-const START_SECONDS = 5;
-const PLAY_SECONDS = 26;
-const END_LIMIT_SECONDS = 600;
-/**
- * How far ahead, in seconds, the autopilot checks each way it could move: the play scene's pilot
- * looks well ahead and keeps all its lives; the end scene's looks only a moment ahead, so it is
- * caught out once the blocks speed up, as a hurried player is.
- */
-const HORIZON_PLAY = 0.7;
-const HORIZON_END = 0.25;
-const SAMPLE = 1 / 30;
-const DIRECTIONS = [0, -1, 1];
-/** Extra room, each side, it keeps between the paddle and a block. */
-const MARGIN = 10;
-
-/** Seconds until moving in `direction` (-1, 0, 1) runs the paddle into a block; Infinity when it never does. */
-function timeToHit(state, direction, horizon) {
-  const player = state.player;
-  for (let t = SAMPLE; t <= horizon; t += SAMPLE) {
-    const x = Math.min(FIELD.width - player.width, Math.max(0, player.x + direction * PLAYER.speed * t));
-    for (let index = 0; index < state.items.length; index += 1) {
-      const item = state.items[index];
-      if (!item.active || item.kind !== KIND_BLOCK) continue;
-      const y = item.y + item.speed * t;
-      if (y + item.height > player.y && y < player.y + player.height && item.x < x + player.width + MARGIN && item.x + item.width > x - MARGIN) return t;
-    }
+function driveToward(S, tx, tz, steps) {
+  for (let i = 0; i < steps; i++) {
+    const car = S.playerCar;
+    const px = car ? car.x : S.player.x, pz = car ? car.z : S.player.z;
+    const dx = tx - px, dz = tz - pz;
+    const want = Math.atan2(dx, dz);
+    const cur = car ? car.angle : S.player.angle;
+    let da = want - cur;
+    while (da > Math.PI) da -= Math.PI * 2;
+    while (da < -Math.PI) da += Math.PI * 2;
+    // steer by faking keys; reverse briefly if stuck against a building
+    const stuck = car && Math.abs(car.speed) < 1 && i > 60;
+    S.input.keys['KeyW'] = !stuck;
+    S.input.keys['KeyS'] = !!stuck;
+    S.input.keys['KeyA'] = da < -0.08;
+    S.input.keys['KeyD'] = da > 0.08;
+    stepWorld(S, CFG.tick);
+    if (Math.hypot(tx - px, tz - pz) < 6) break;
   }
-  return Infinity;
+  S.input.keys['KeyW'] = false; S.input.keys['KeyS'] = false;
+  S.input.keys['KeyA'] = false; S.input.keys['KeyD'] = false;
 }
-
-/** Of the safe ways to move, the one toward the lowest coin (or the centre); else the one that is hit last. */
-function autopilot(state, horizon) {
-  const player = state.player;
-  let coin = null;
-  for (let index = 0; index < state.items.length; index += 1) {
-    const item = state.items[index];
-    if (item.active && item.kind !== KIND_BLOCK && (coin === null || item.y > coin.y)) coin = item;
+// Drive a street-following route: legs along the z=40 street, then the malecon.
+// The autopilot taps Lena's quick-fix (key 4) every leg so the car survives the chase.
+// If the car is lost mid-route, steal the nearest one and keep going.
+function driveRoute(S, legs, stepsPerLeg) {
+  for (const [tx, tz] of legs) {
+    driveToward(S, tx, tz, stepsPerLeg);
+    if (!S.playerCar) stealNearest(S);
+    S.input.pressed['Digit4'] = true;
+    stepWorld(S, CFG.tick);
+    if (S.playerCar) S.playerCar.health = Math.max(S.playerCar.health, 70);
+    S.player.health = Math.max(S.player.health, 80);
   }
-  const target = coin === null ? FIELD.width / 2 : coin.x + coin.width / 2;
-  const centre = player.x + player.width / 2;
-  const wanted = target > centre + 8 ? 1 : target < centre - 8 ? -1 : 0;
-  let best = wanted;
-  let bestTime = timeToHit(state, wanted, horizon);
-  for (let index = 0; index < DIRECTIONS.length && bestTime !== Infinity; index += 1) {
-    const time = timeToHit(state, DIRECTIONS[index], horizon);
-    if (time > bestTime) {
-      bestTime = time;
-      best = DIRECTIONS[index];
-    }
-  }
-  return best;
 }
+function streetRoute(S) {
+  const car = S.playerCar;
+  if (!car) return [[40, 40], [120, 40], [CFG.maleconX - 6, 40]];
+  const streets = CFG.streets;
+  const nearX = streets.reduce((a, b) => (Math.abs(car.x - a) < Math.abs(car.x - b) ? a : b));
+  const nearZ = streets.reduce((a, b) => (Math.abs(car.z - a) < Math.abs(car.z - b) ? a : b));
+  if (Math.abs(car.x - nearX) < Math.abs(car.z - nearZ)) {
+    // on a vertical street: ride it to z=40, then east along z=40 to the malecon
+    return [[nearX, 40], [120, 40], [CFG.maleconX - 6, 40]];
+  }
+  // on a horizontal street: ride it to x=40, then to z=40, then east
+  return [[40, nearZ], [40, 40], [120, 40], [CFG.maleconX - 6, 40]];
+}
+function stealNearest(S) {
+  let best = null, bd = 1e9;
+  for (const c of S.cars) {
+    if (c.dead || c.police) continue;
+    const d = Math.hypot(c.x - S.player.x, c.z - S.player.z);
+    if (d < bd) { bd = d; best = c; }
+  }
+  if (best) { S.player.x = best.x - 2; S.player.z = best.z; S.input.pressed['KeyE'] = true; stepWorld(S, CFG.tick); }
+}
+function settle(S, steps) { for (let i = 0; i < steps; i++) stepWorld(S, CFG.tick); }
 
-/**
- * Set `world` to the named scene (start, play or end; any other name is start) and return the
- * screen to draw over it and the best score to show.
- */
-export function stageShot(name, world) {
-  world.reset();
-  if (name !== 'play' && name !== 'end') {
-    for (let index = 0; index < START_SECONDS / STEP; index += 1) world.step(STEP, 0, true);
-    return { screen: SCREEN_TITLE, best: 0 };
+export function stageShot(name, S) {
+  resetWorld(S, S.seed);
+  S.screen = 'play';
+  S.autopilot = true; // staging never fails the mission mid-drive
+  S.dialogTimer = 0;
+  if (name === 'onfoot') {
+    // stage 1: Rafi on foot in the old district, a stealable car beside him
+    settle(S, 60);
+    let best = null, bd = 1e9;
+    for (const c of S.cars) {
+      if (c.dead || c.police) continue;
+      const d = Math.hypot(c.x - S.player.x, c.z - S.player.z);
+      if (d < bd) { bd = d; best = c; }
+    }
+    if (best) { best.x = S.player.x + 4; best.z = S.player.z + 1; best.angle = 0; best.speed = 0; }
+    S.player.nearCar = best;
+    S.dialog = 'RAFI: That sedan will do. Quiet street, nobody watching... yet.';
+    S.dialogTimer = 99;
+    return;
   }
-  const limit = name === 'end' ? END_LIMIT_SECONDS : PLAY_SECONDS;
-  const horizon = name === 'end' ? HORIZON_END : HORIZON_PLAY;
-  for (let index = 0; index < limit / STEP; index += 1) {
-    if (world.step(STEP, autopilot(world.state, horizon), false) & EVENT_OVER) break;
+  // chaos / roadblock / results all play the mission forward
+  stealNearest(S);
+  S.player.health = 100;
+  driveRoute(S, streetRoute(S), 60 * 25);
+  S.stage = 2; S.stageTimer = 127; // 2:07 left on the clock
+  S.wanted = 4;
+  S.dialog = 'LENA: Two minutes left on the clock, Rafi — and the whole CDPD is behind you!';
+  S.dialogTimer = 99;
+  if (name === 'chaos') {
+    driveToward(S, CFG.maleconX - 4, 44, 60 * 12);
+    // final framing on the malecon: Rafi in the car at speed, a wreck exploding
+    // beside him, chase units closing in, heli spotlight overhead
+    if (!S.playerCar) stealNearest(S);
+    const pc = S.playerCar;
+    if (pc) {
+      pc.x = 140; pc.z = 36; pc.angle = Math.PI / 2; pc.speed = 20; pc.health = 62;
+      S.player.x = pc.x; S.player.z = pc.z; S.player.angle = pc.angle;
+    }
+    const victim = S.cars.find((c) => !c.dead && !c.police && c !== S.playerCar);
+    if (victim) {
+      victim.x = 149; victim.z = 43; victim.angle = 0.4;
+      explodeCar(S, victim);
+      spawnExplosion(victim.x, victim.z, 60, S.rng);
+    }
+    S.wanted = 5;
+    S.stage = 2; S.stageTimer = 114;
+    S.heli.active = true;
+    S.heli.x = S.player.x + 12; S.heli.z = S.player.z - 10;
+    S.money = 48250;
+    S.player.health = 78; S.player.armour = 35;
+    // frame the action: look south-east of the player so Rafi sits upper-left
+    // and the explosion sits near the centre of the frame, clear of the dialog bar
+    S.cam.x = S.player.x + 12; S.cam.z = S.player.z + 25;
+    settle(S, 2);
+    return;
   }
-  const over = world.state.lives === 0;
-  return { screen: over ? SCREEN_OVER : SCREEN_PLAY, best: world.state.score };
+  if (name === 'roadblock') {
+    S.stage = 3;
+    S.dialog = 'DON CELSO: You steal from me, Rafi? The boat leaves without you. My men are everywhere.';
+    S.dialogTimer = 99;
+    S.wanted = 5;
+    S.heli.active = true;
+    S.heli.x = S.player.x + 10; S.heli.z = S.player.z - 8;
+    S.muzzle = 0.08;
+    S.weapons[1].ammo = 9;
+    S.weaponIdx = 1;
+    S.player.health = 46; S.player.armour = 12;
+    if (S.playerCar) { S.playerCar.health = 38; }
+    S.money = 48250;
+    driveRoute(S, [[148, 0]], 60 * 10);
+    // final framing at the pier mouth: Rafi's car facing the roadblock, pistol out,
+    // muzzle flash frozen, heli spotlight overhead, Don Celso's line on screen
+    if (!S.playerCar) stealNearest(S);
+    const pc = S.playerCar;
+    if (pc) {
+      pc.x = 132; pc.z = 0; pc.angle = Math.PI / 2; pc.speed = 14; pc.health = 38;
+      S.player.x = pc.x; S.player.z = pc.z; S.player.angle = pc.angle;
+    }
+    const blocks = S.police.filter((c) => c.role === 'roadblock' && !c.dead);
+    blocks.forEach((c, i) => {
+      c.x = 150 + (i % 2) * 4; c.z = -8 + i * 8; c.angle = Math.PI / 2; c.speed = 0;
+    });
+    const chasers = S.police.filter((c) => c.role !== 'roadblock' && !c.dead).slice(0, 2);
+    chasers.forEach((c, i) => { c.x = 118 + i * 6; c.z = -14 + i * 28; c.angle = Math.PI / 2; });
+    S.muzzle = 5;
+    // frame the action: look east so Rafi sits left and the roadblock fills the centre
+    S.cam.x = S.player.x + 25; S.cam.z = S.player.z + 10;
+    settle(S, 2);
+    return;
+  }
+  // results
+  S.stage = 3;
+  S.screen = 'play'; S.failed = false; S.autopilot = false;
+  S.player.x = S.city.boat.x - 6; S.player.z = S.city.boat.z;
+  S.player.health = 100;
+  S.dialog = DIALOG.complete;
+  S.dialogTimer = 99;
+  S.money = 1250 + 8500;
+  S.respect = 120;
+  S.save.rank = 1;
+  S.reward = 8500; S.rankUp = true;
+  S.upgradeNote = 'Garage: Engine Lv 1 — Vulcano GT tuned';
+  S.missionDone = true; S.screen = 'results'; S.failed = false;
 }
