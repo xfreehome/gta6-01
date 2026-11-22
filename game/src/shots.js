@@ -94,34 +94,44 @@ export function stageShot(name, S) {
   S.dialog = 'LENA: Two minutes left on the clock, Rafi — and the whole CDPD is behind you!';
   S.dialogTimer = 99;
   if (name === 'chaos') {
-    driveToward(S, CFG.maleconX - 4, 44, 60 * 12);
-    // final framing on the malecon: Rafi in the car at speed, a wreck exploding
-    // beside him, chase units closing in, heli spotlight overhead
+    // dense-street staging: the x=40 / z=40 intersection, buildings on three
+    // corners, no empty sand in frame, camera close — the old malecon framing
+    // was ~60% bare sand with Rafi a speck inside the spotlight blob
     if (!S.playerCar) stealNearest(S);
     const pc = S.playerCar;
     if (pc) {
-      pc.x = 140; pc.z = 36; pc.angle = Math.PI / 2; pc.speed = 20; pc.health = 62;
+      pc.x = 28; pc.z = 40; pc.angle = Math.PI / 2; pc.speed = 18; pc.health = 62;
       S.player.x = pc.x; S.player.z = pc.z; S.player.angle = pc.angle;
     }
     const victim = S.cars.find((c) => !c.dead && !c.police && c !== S.playerCar);
     if (victim) {
-      victim.x = 152; victim.z = 50; victim.angle = 0.4;
+      victim.x = 45; victim.z = 35; victim.angle = 0.3; victim.speed = 0;
       explodeCar(S, victim);
       spawnExplosion(victim.x, victim.z, 90, S.rng);
     }
+    // traffic in frame: oncoming car on the z=40 road, cross traffic on x=40
+    const extras = S.cars.filter((c) => !c.dead && !c.police && c !== S.playerCar && c !== victim);
+    if (extras[0]) { extras[0].x = 60; extras[0].z = 40; extras[0].angle = -Math.PI / 2; extras[0].speed = 10; }
+    if (extras[1]) { extras[1].x = 40; extras[1].z = 64; extras[1].angle = 0; extras[1].speed = 8; }
+    if (extras[2]) { extras[2].x = 40; extras[2].z = 16; extras[2].angle = Math.PI; extras[2].speed = 8; }
     S.wanted = 5;
     S.stage = 2; S.stageTimer = 114;
     S.heli.active = true;
-    S.heli.x = S.player.x + 12; S.heli.z = S.player.z - 10;
-    // two chase units right behind Rafi so the pursuit reads in frame
-    const chasers = S.police.filter((c) => c.role !== 'roadblock' && !c.dead).slice(0, 2);
-    chasers.forEach((c, i) => { c.x = 122 + i * 4; c.z = 28 + i * 18; c.angle = Math.PI / 2; c.speed = 16; });
+    // close overhead, inside the camera's top edge (frustum check: at the old
+    // +12/-16 offset the heli sat above the frame and never showed)
+    S.heli.x = S.player.x + 6; S.heli.z = S.player.z - 8;
+    // four chase units closing in, so the pursuit reads in frame (the panel
+    // lists four units — all four should be visible, not two near + two 100m out)
+    const chasers = S.police.filter((c) => c.role !== 'roadblock' && !c.dead).slice(0, 4);
+    [[10, 40], [14, 31], [6, 49], [22, 28]].forEach(([x, z], i) => {
+      const c = chasers[i]; if (!c) return;
+      c.x = x; c.z = z; c.angle = Math.PI / 2; c.speed = 16;
+    });
     S.money = 48250;
     S.player.health = 78; S.player.armour = 35;
-    // frame the action: look south-east of the player so Rafi sits upper-left
-    // and the explosion sits near the centre of the frame, clear of the dialog bar
-    S.cam.x = S.player.x + 12; S.cam.z = S.player.z + 25;
     settle(S, 2);
+    // camera LAST: settle() drifts it toward the player via updateCamera
+    S.cam.x = 36; S.cam.z = 46; S.cam.height = 58; S.cam.back = 34;
     return;
   }
   if (name === 'roadblock') {
@@ -130,7 +140,6 @@ export function stageShot(name, S) {
     S.dialogTimer = 99;
     S.wanted = 5;
     S.heli.active = true;
-    S.heli.x = S.player.x + 10; S.heli.z = S.player.z - 8;
     S.muzzle = 0.08;
     S.weapons[1].ammo = 9;
     S.weaponIdx = 1;
@@ -140,25 +149,36 @@ export function stageShot(name, S) {
     driveRoute(S, [[148, 0]], 60 * 10);
     // final framing at the pier mouth: Rafi's car facing the roadblock, pistol out,
     // muzzle flash frozen, heli spotlight overhead, Don Celso's line on screen.
-    // Camera sits close over the roadblock so the three units fill the centre
-    // of the frame instead of reading as distant specks.
     if (!S.playerCar) stealNearest(S);
     const pc = S.playerCar;
     if (pc) {
-      pc.x = 132; pc.z = 0; pc.angle = Math.PI / 2; pc.speed = 14; pc.health = 38;
+      pc.x = 130; pc.z = 0; pc.angle = Math.PI / 2; pc.speed = 12; pc.health = 38;
       S.player.x = pc.x; S.player.z = pc.z; S.player.angle = pc.angle;
     }
     S.player.health = 46; S.player.armour = 12;
+    // a real roadblock: a solid wall of four CDPD units side by side across
+    // the pier-mouth road (z -13..13), noses across the road — the old
+    // diagonal scatter (x stepped with z) read as parked cars, not a block
     const blocks = S.police.filter((c) => c.role === 'roadblock' && !c.dead);
-    blocks.forEach((c, i) => {
-      c.x = 150 + (i % 2) * 4; c.z = -8 + i * 8; c.angle = Math.PI / 2; c.speed = 0;
+    const chasers = S.police.filter((c) => c.role !== 'roadblock' && !c.dead);
+    while (blocks.length < 4 && chasers.length) {
+      const c = chasers.shift();
+      c.role = 'roadblock'; c.blocking = true;
+      c.unit = 'CDPD-58'; // unit names cycle over 6 spawns; a converted chaser
+      blocks.push(c); // would otherwise duplicate a name in the panel
+    }
+    blocks.slice(0, 4).forEach((c, i) => {
+      c.x = 152; c.z = -10.5 + i * 7; c.angle = 0; c.speed = 0; c.blocking = true;
     });
-    const chasers = S.police.filter((c) => c.role !== 'roadblock' && !c.dead).slice(0, 2);
-    chasers.forEach((c, i) => { c.x = 118 + i * 6; c.z = -14 + i * 28; c.angle = Math.PI / 2; });
+    // remaining chasers close in behind Rafi
+    chasers.slice(0, 2).forEach((c, i) => { c.x = 114 + i * 4; c.z = -6 + i * 12; c.angle = Math.PI / 2; c.speed = 14; });
+    // roadblock units first, so the response panel names the block, not chasers
+    S.police.sort((a, b) => (a.role === 'roadblock' ? 0 : 1) - (b.role === 'roadblock' ? 0 : 1));
+    S.heli.x = 132; S.heli.z = -6; // right over Rafi on open road, clear of roofs
     S.muzzle = 5;
-    // frame the action: look east so Rafi sits left and the roadblock fills the centre
-    S.cam.x = 146; S.cam.z = 0; S.cam.height = 68; S.cam.back = 42;
     settle(S, 2);
+    // camera LAST: settle() drifts it toward the player via updateCamera
+    S.cam.x = 144; S.cam.z = 2; S.cam.height = 50; S.cam.back = 28;
     return;
   }
   // results

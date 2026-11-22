@@ -30,6 +30,8 @@ function paint() {
     pcx: S.playerCar ? Math.round(S.playerCar.x) : null,
     pcz: S.playerCar ? Math.round(S.playerCar.z) : null,
     camx: Math.round(S.cam.x), camz: Math.round(S.cam.z),
+    missionDone: S.missionDone,
+    heli: S.heli.active ? [Math.round(S.heli.x), Math.round(S.heli.z)] : null,
     wanted: S.wanted, stage: S.stage, screen: S.screen,
     deadPos: S.cars.filter((c) => c.dead).map((c) => [Math.round(c.x), Math.round(c.z)]),
     ang: S.playerCar ? S.playerCar.angle : S.player.angle,

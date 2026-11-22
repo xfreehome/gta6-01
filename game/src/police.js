@@ -99,8 +99,10 @@ export function stepPolice(S, dt) {
   }
 }
 export function policePanel(S) {
+  // distance is computed live: blocking (roadblock) units never run the
+  // chase step that refreshes c.dist, so the panel showed stale 0m / 253m
   return S.police.filter((c) => !c.dead).slice(0, 4).map((c) => ({
     unit: c.unit, role: c.role.toUpperCase(),
-    dist: Math.round(c.dist || 0) + 'm',
+    dist: Math.round(Math.hypot(S.player.x - c.x, S.player.z - c.z)) + 'm',
   }));
 }

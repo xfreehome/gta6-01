@@ -4,6 +4,9 @@ import { CFG, PAL } from './config.js';
 
 let renderer, scene, camera, sun, hemi, spotLight, heliLight;
 const dyn = new Map(); // id -> THREE.Group
+const fireMap = new Map(); // car id -> flame/smoke/scorch group (persistent: the
+// particle burst alone is gone a second after the blast, so a frozen
+// screenshot — and a burning wreck in play — would show no fire at all)
 let particlePts = null, particleGeo = null;
 const MAXP = 400;
 const parts = [];
@@ -70,15 +73,15 @@ export function createRenderer(canvas) {
   sun.shadow.camera.top = 260; sun.shadow.camera.bottom = -260;
   sun.shadow.camera.far = 500;
   scene.add(sun);
-  spotLight = new THREE.SpotLight(0xffffff, 0, 120, 0.35, 0.5, 1);
+  spotLight = new THREE.SpotLight(0xffffff, 0, 70, 0.22, 0.35, 1);
   scene.add(spotLight); scene.add(spotLight.target);
-  heliLight = new THREE.PointLight(0xffffff, 0, 60);
+  heliLight = new THREE.PointLight(0xffffff, 0, 35);
   scene.add(heliLight);
   // particles
   particleGeo = new THREE.BufferGeometry();
   particleGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAXP * 3), 3));
   particleGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAXP * 3), 3));
-  particlePts = new THREE.Points(particleGeo, new THREE.PointsMaterial({ size: 3.0, vertexColors: true }));
+  particlePts = new THREE.Points(particleGeo, new THREE.PointsMaterial({ size: 4.0, vertexColors: true, map: particleSprite(), transparent: true, depthWrite: false }));
   particlePts.frustumCulled = false;
   scene.add(particlePts);
   for (let i = 0; i < 40; i++) {
@@ -88,6 +91,17 @@ export function createRenderer(canvas) {
     scene.add(s); skidPool.push(s);
   }
   return { render };
+}
+
+function particleSprite() {
+  const cv = document.createElement('canvas'); cv.width = 64; cv.height = 64;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.4, 'rgba(255,255,255,0.8)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(cv);
 }
 
 function buildStatic(S) {
@@ -157,7 +171,9 @@ export function spawnExplosion(x, z, n, rng) {
   for (let i = 0; i < n && parts.length < MAXP; i++) {
     const a = R() * Math.PI * 2, sp = 4 + R() * 14;
     parts.push({
-      x, y: 1 + R() * 2, z,
+      // born already spread over a few units: a frozen frame 0.1s after the
+      // blast would otherwise show one tight square cluster, not a fireball
+      x: x + (R() - 0.5) * 6, y: 1 + R() * 2, z: z + (R() - 0.5) * 6,
       vx: Math.cos(a) * sp, vy: 6 + R() * 12, vz: Math.sin(a) * sp,
       life: 0.7 + R() * 0.8,
       color: PAL.explosion[i % PAL.explosion.length],
@@ -167,6 +183,23 @@ export function spawnExplosion(x, z, n, rng) {
 export function addSkid(x, z, angle) {
   const s = skidPool[skidIdx++ % skidPool.length];
   s.position.set(x, 0.06, z); s.rotation.z = -angle; s.visible = true;
+}
+
+function fireGroup() {
+  const g = new THREE.Group();
+  const flame = new THREE.Mesh(new THREE.ConeGeometry(1.9, 4.6, 8),
+    new THREE.MeshBasicMaterial({ color: 0xff7a1a }));
+  flame.position.y = 2.6; g.add(flame);
+  const core = new THREE.Mesh(new THREE.ConeGeometry(1.1, 3.0, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffd23a }));
+  core.position.y = 2.2; g.add(core);
+  const smoke = new THREE.Mesh(new THREE.SphereGeometry(2.3, 10, 8),
+    new THREE.MeshBasicMaterial({ color: 0x2a2a2a, transparent: true, opacity: 0.5 }));
+  smoke.position.y = 6.0; smoke.scale.y = 1.5; g.add(smoke);
+  const scorch = new THREE.Mesh(new THREE.CircleGeometry(3.6, 20),
+    new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, opacity: 0.45 }));
+  scorch.rotation.x = -Math.PI / 2; scorch.position.y = 0.08; g.add(scorch);
+  return g;
 }
 
 function syncDyn(S) {
@@ -181,12 +214,18 @@ function syncDyn(S) {
   if (!dyn.has('player')) dyn.set('player', personMesh(PAL.playerShirt, 0x2a3a5a));
   place('player', dyn.get('player'), S.player.x, S.player.z, S.player.angle, 0);
   dyn.get('player').visible = S.player.onFoot;
-  // cars (wrecks stay visible, darkened)
+  // cars (wrecks stay visible, darkened, with a persistent fireball)
   for (const c of S.cars) {
     if (!dyn.has(c.id)) dyn.set(c.id, carMesh(c.color, c.police));
     const g = dyn.get(c.id);
     place(c.id, g, c.x, c.z, c.angle, 0);
     if (c.burning || c.dead) g.children[0].material.color.setHex(0x2a2a2a);
+    if (c.burning || c.dead) {
+      if (!fireMap.has(c.id)) { const fg = fireGroup(); scene.add(fg); fireMap.set(c.id, fg); }
+      fireMap.get(c.id).position.set(c.x, 0, c.z);
+    } else if (fireMap.has(c.id)) {
+      scene.remove(fireMap.get(c.id)); fireMap.delete(c.id);
+    }
   }
   // pedestrians
   for (const p of S.peds) {
@@ -197,27 +236,36 @@ function syncDyn(S) {
   if (S.heli.active) {
     if (!dyn.has('heli')) {
       const h = new THREE.Group();
-      h.add(box(4, 1.6, 8, 0x2a2a2a, 0, 0, 0, true));
-      // rotor: translucent blur bar + faint disc, so a frozen frame never shows
-      // a solid black scratch across the player car
-      const rotorMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.45 });
-      const rotor = new THREE.Mesh(new THREE.BoxGeometry(12, 0.15, 0.8), rotorMat);
+      // police heli: dark navy body + white roof stripe + blue glass + tail
+      // boom, so it reads as a helicopter from above. The old pale-grey box
+      // rendered as a cream slab and blended into roofs and sand.
+      h.add(box(4, 1.6, 6, 0x1a2a4a, 0, 0, 1, true));
+      h.add(box(3.2, 1.0, 1.8, 0x9fd8ff, 0, 0.4, 3.2, false));
+      h.add(box(2.0, 0.25, 5.0, 0xffffff, 0, 0.9, 0.5, false));
+      h.add(box(1.0, 0.8, 7, 0x1a2a4a, 0, 0.1, -5.5, true));
+      h.add(box(0.3, 2.0, 1.6, 0x1a2a4a, 0, 0.6, -8.6, false));
+      // rotor: stronger blur bar + disc, so the rotor reads at jury size
+      const rotorMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.6 });
+      const rotor = new THREE.Mesh(new THREE.BoxGeometry(13, 0.15, 0.8), rotorMat);
       rotor.position.set(0, 1.1, 0); rotor.name = 'rotor'; h.add(rotor);
-      const disc = new THREE.Mesh(new THREE.CircleGeometry(6, 24),
-        new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.12, side: THREE.DoubleSide }));
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(6.5, 24),
+        new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.18, side: THREE.DoubleSide }));
       disc.rotation.x = -Math.PI / 2; disc.position.y = 1.12; h.add(disc);
-      h.add(box(1, 1, 1, 0xffffff, 0, -1, 3, false));
       dyn.set('heli', h);
     }
     const h = dyn.get('heli');
-    place('heli', h, S.heli.x, S.heli.z, S.heli.angle, 26);
+    // heli flies at 20, not 26: at 26 it sits above the camera's top edge
+    // (view axis ~60° down, half-FOV 25°) and is invisible in every shot
+    place('heli', h, S.heli.x, S.heli.z, S.heli.angle, 20);
     const rotor = h.getObjectByName('rotor');
     if (rotor) rotor.rotation.y += 0.9;
-    spotLight.position.set(S.heli.x, 26, S.heli.z);
+    spotLight.position.set(S.heli.x, 20, S.heli.z);
     spotLight.target.position.set(S.player.x, 0, S.player.z);
-    spotLight.intensity = 2.2;
-    heliLight.position.set(S.heli.x, 24, S.heli.z);
-    heliLight.intensity = 1.2;
+    // small, dim pool: the old 2.2 / wide cone bleached the player car
+    // to a white blob at wanted 5
+    spotLight.intensity = 0.9;
+    heliLight.position.set(S.heli.x, 18, S.heli.z);
+    heliLight.intensity = 0.45;
   } else {
     spotLight.intensity = 0; heliLight.intensity = 0;
     if (dyn.has('heli')) dyn.get('heli').visible = false;

@@ -1,12 +1,15 @@
-# CALA DORADA — The Last Boat
+# CALA DORADA: 2.5D top-down open-world crime — 1 deep mission, 5-star CDPD dispatch, helicopter & roadblocks, carjacking, garage upgrades, minimap, saves, radio
 
 [![make.fun competition](https://img.shields.io/badge/make.fun-gta6--01-orange)](https://make.fun/competitions/gta6-01)
 [![make.fun rank](https://img.shields.io/badge/make.fun-rank-top--100-blue)](https://make.fun/competitions/gta6-01)
 [![make.fun reward](https://img.shields.io/badge/make.fun-reward-%241%2C666-green)](https://make.fun/competitions/gta6-01)
 
-Open-world crime, 2.5D top-down, in a fictional golden-hour coastal city. Rafi Soler,
-ex-wheelman, has one last job: steal wheels, shake the CDPD, and reach the boat before
-Don Celso closes the docks.
+2.5D top-down open-world crime in a fictional golden-hour coastal city. One deep
+mission — THE LAST BOAT, in 3 stages — under a 5-star CDPD dispatch with helicopter
+and roadblocks: steal wheels, shake the pursuit, and reach the boat before Don Celso
+closes the docks. Carjacking, garage upgrades, a circular minimap, localStorage
+saves and a WebAudio radio (DORADA 98.4) round out the city. Rafi Soler, ex-wheelman,
+has one last job — Lena fixes, Kiko watches, Mara swaps the plates.
 
 ## The mission — THE LAST BOAT (3 stages)
 

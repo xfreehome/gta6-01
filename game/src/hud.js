@@ -17,8 +17,10 @@ export function updateHud(S) {
   $('hud-respect').textContent = 'RESPECT ' + S.respect + ' — ' + RANKS[Math.min(S.save.rank, RANKS.length - 1)];
   $('hud-wanted').textContent = stars(S.wanted);
   $('hud-wanted').style.color = S.wanted >= 4 ? '#ff3a3a' : '#ffd23a';
-  $('hud-clock').textContent = clockStr(S.clockMin) + '  •  DORADA 98.4 ♪';
-  $('hud-radio').textContent = S.radioOn ? '♪ DORADA 98.4 — Golden Hour Mix' : 'RADIO OFF (R)';
+  // clock is just the time now; the station name lives on the radio line
+  // below, so neither line runs to the right edge any more
+  $('hud-clock').textContent = clockStr(S.clockMin);
+  $('hud-radio').textContent = S.radioOn ? '♪ DORADA 98.4 — Golden Hour' : 'RADIO OFF (R)';
   $('hud-health').style.width = Math.max(0, S.player.health) + '%';
   $('hud-armour').style.width = Math.max(0, S.player.armour) + '%';
   $('hud-hp-text').textContent = 'HP ' + Math.ceil(S.player.health) + '  ARMOUR ' + Math.ceil(S.player.armour);
