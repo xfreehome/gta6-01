@@ -27,8 +27,11 @@ function spawnUnit(S, role) {
   return car;
 }
 export function stepPolice(S, dt) {
+  if (S.ramImmune > 0) S.ramImmune -= dt;
   const want = wantedTarget(S);
-  if (want > S.wanted && S.stage > 0) S.wanted = want;
+  // Raise wanted only when a new stage starts. Raising it every step would
+  // instantly undo the unseen-decay below and Mara's plate swap.
+  if (want > S.wanted && S.wantedStage !== S.stage) { S.wanted = want; S.wantedStage = S.stage; }
   // spawn / despawn to match wanted level
   const need = S.wanted === 0 ? 0 : S.wanted <= 1 ? 1 : S.wanted <= 2 ? 2 : S.wanted <= 3 ? 3 : 4;
   while (S.police.filter((c) => !c.dead).length < need) spawnUnit(S, S.wanted >= 3 ? 'chase' : 'patrol');
@@ -70,13 +73,17 @@ export function stepPolice(S, dt) {
       car.angle += Math.max(-2.2 * dt, Math.min(2.2 * dt, da));
       const target = S.wanted >= 3 ? 24 : 17;
       car.speed += (target - car.speed) * dt * 0.8;
-      // ram the player car (cooldown so one unit cannot grind it down)
+      // ram the player car: per-unit cooldown plus a short shared immunity
+      // window, so four units piling on cannot delete the car in seconds
       if (car.ramCd > 0) car.ramCd -= dt;
-      if (dist < 4.5 && S.playerCar && (car.ramCd || 0) <= 0) {
+      if (dist < 4.5 && S.playerCar && (car.ramCd || 0) <= 0 && (S.ramImmune || 0) <= 0) {
         damageCar(S, S.playerCar, 12);
         car.ramCd = 1.5;
         car.speed *= 0.6;
-        S.playerCar.speed *= 0.85;
+        S.ramImmune = 1.0;
+        // damageCar can explode the player car, which clears S.playerCar —
+        // re-check before touching it, or this line throws
+        if (S.playerCar) S.playerCar.speed *= 0.85;
       }
       if (dist < 3 && S.player.onFoot && car.speed < 3) {
         S.player.health -= 1.5 * dt;

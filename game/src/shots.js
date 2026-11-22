@@ -105,14 +105,17 @@ export function stageShot(name, S) {
     }
     const victim = S.cars.find((c) => !c.dead && !c.police && c !== S.playerCar);
     if (victim) {
-      victim.x = 149; victim.z = 43; victim.angle = 0.4;
+      victim.x = 152; victim.z = 50; victim.angle = 0.4;
       explodeCar(S, victim);
-      spawnExplosion(victim.x, victim.z, 60, S.rng);
+      spawnExplosion(victim.x, victim.z, 90, S.rng);
     }
     S.wanted = 5;
     S.stage = 2; S.stageTimer = 114;
     S.heli.active = true;
     S.heli.x = S.player.x + 12; S.heli.z = S.player.z - 10;
+    // two chase units right behind Rafi so the pursuit reads in frame
+    const chasers = S.police.filter((c) => c.role !== 'roadblock' && !c.dead).slice(0, 2);
+    chasers.forEach((c, i) => { c.x = 122 + i * 4; c.z = 28 + i * 18; c.angle = Math.PI / 2; c.speed = 16; });
     S.money = 48250;
     S.player.health = 78; S.player.armour = 35;
     // frame the action: look south-east of the player so Rafi sits upper-left
@@ -136,13 +139,16 @@ export function stageShot(name, S) {
     S.money = 48250;
     driveRoute(S, [[148, 0]], 60 * 10);
     // final framing at the pier mouth: Rafi's car facing the roadblock, pistol out,
-    // muzzle flash frozen, heli spotlight overhead, Don Celso's line on screen
+    // muzzle flash frozen, heli spotlight overhead, Don Celso's line on screen.
+    // Camera sits close over the roadblock so the three units fill the centre
+    // of the frame instead of reading as distant specks.
     if (!S.playerCar) stealNearest(S);
     const pc = S.playerCar;
     if (pc) {
       pc.x = 132; pc.z = 0; pc.angle = Math.PI / 2; pc.speed = 14; pc.health = 38;
       S.player.x = pc.x; S.player.z = pc.z; S.player.angle = pc.angle;
     }
+    S.player.health = 46; S.player.armour = 12;
     const blocks = S.police.filter((c) => c.role === 'roadblock' && !c.dead);
     blocks.forEach((c, i) => {
       c.x = 150 + (i % 2) * 4; c.z = -8 + i * 8; c.angle = Math.PI / 2; c.speed = 0;
@@ -151,7 +157,7 @@ export function stageShot(name, S) {
     chasers.forEach((c, i) => { c.x = 118 + i * 6; c.z = -14 + i * 28; c.angle = Math.PI / 2; });
     S.muzzle = 5;
     // frame the action: look east so Rafi sits left and the roadblock fills the centre
-    S.cam.x = S.player.x + 25; S.cam.z = S.player.z + 10;
+    S.cam.x = 146; S.cam.z = 0; S.cam.height = 68; S.cam.back = 42;
     settle(S, 2);
     return;
   }

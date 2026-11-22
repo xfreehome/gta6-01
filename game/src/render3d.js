@@ -32,7 +32,8 @@ function carMesh(color, police) {
   if (police) {
     const bar = box(1.4, 0.25, 0.5, 0x3a6ff2, 0, 1.6, -0.2, false);
     bar.name = 'lightbar'; g.add(bar);
-    g.add(box(2.3, 0.15, 4.7, 0xffffff, 0, 0.95, 0, false));
+    // narrow white roof stripe: the dark navy body must still read from above
+    g.add(box(1.3, 0.15, 2.4, 0xd8d8d8, 0, 0.95, 0, false));
   }
   return g;
 }
@@ -64,7 +65,7 @@ export function createRenderer(canvas) {
   sun = new THREE.DirectionalLight(0xffb45e, 1.5);
   sun.position.set(-120, 140, 60);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.mapSize.set(1024, 1024);
   sun.shadow.camera.left = -260; sun.shadow.camera.right = 260;
   sun.shadow.camera.top = 260; sun.shadow.camera.bottom = -260;
   sun.shadow.camera.far = 500;
@@ -77,7 +78,7 @@ export function createRenderer(canvas) {
   particleGeo = new THREE.BufferGeometry();
   particleGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAXP * 3), 3));
   particleGeo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(MAXP * 3), 3));
-  particlePts = new THREE.Points(particleGeo, new THREE.PointsMaterial({ size: 2.4, vertexColors: true }));
+  particlePts = new THREE.Points(particleGeo, new THREE.PointsMaterial({ size: 3.0, vertexColors: true }));
   particlePts.frustumCulled = false;
   scene.add(particlePts);
   for (let i = 0; i < 40; i++) {
@@ -197,8 +198,14 @@ function syncDyn(S) {
     if (!dyn.has('heli')) {
       const h = new THREE.Group();
       h.add(box(4, 1.6, 8, 0x2a2a2a, 0, 0, 0, true));
-      const rotor = box(12, 0.15, 0.8, 0x111111, 0, 1.1, 0, false);
-      rotor.name = 'rotor'; h.add(rotor);
+      // rotor: translucent blur bar + faint disc, so a frozen frame never shows
+      // a solid black scratch across the player car
+      const rotorMat = new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.45 });
+      const rotor = new THREE.Mesh(new THREE.BoxGeometry(12, 0.15, 0.8), rotorMat);
+      rotor.position.set(0, 1.1, 0); rotor.name = 'rotor'; h.add(rotor);
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(6, 24),
+        new THREE.MeshBasicMaterial({ color: 0x222222, transparent: true, opacity: 0.12, side: THREE.DoubleSide }));
+      disc.rotation.x = -Math.PI / 2; disc.position.y = 1.12; h.add(disc);
       h.add(box(1, 1, 1, 0xffffff, 0, -1, 3, false));
       dyn.set('heli', h);
     }
@@ -208,7 +215,7 @@ function syncDyn(S) {
     if (rotor) rotor.rotation.y += 0.9;
     spotLight.position.set(S.heli.x, 26, S.heli.z);
     spotLight.target.position.set(S.player.x, 0, S.player.z);
-    spotLight.intensity = 3;
+    spotLight.intensity = 2.2;
     heliLight.position.set(S.heli.x, 24, S.heli.z);
     heliLight.intensity = 1.2;
   } else {
@@ -240,10 +247,13 @@ export function render(S, dt) {
   particleGeo.attributes.position.needsUpdate = true;
   particleGeo.attributes.color.needsUpdate = true;
   syncDyn(S);
-  // camera: top-down fixed angle following S.cam, plus shake
+  // camera: top-down fixed angle following S.cam, plus shake.
+  // A staged shot may set S.cam.height / S.cam.back for a closer framing.
   const sh = S.shake || 0;
   const sx = Math.sin(S.elapsed * 127.1) * sh, sz = Math.cos(S.elapsed * 149.7) * sh;
-  camera.position.set(S.cam.x + sx, CFG.cameraHeight, S.cam.z + CFG.cameraBack + sz);
+  const camH = S.cam.height || CFG.cameraHeight;
+  const camBack = S.cam.back || CFG.cameraBack;
+  camera.position.set(S.cam.x + sx, camH, S.cam.z + camBack + sz);
   camera.lookAt(S.cam.x + sx, 0, S.cam.z + sz);
   sun.position.set(S.cam.x - 120, 140, S.cam.z + 60);
   sun.target.position.set(S.cam.x, 0, S.cam.z);

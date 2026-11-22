@@ -28,7 +28,7 @@ export function createWorld(seed) {
     player: { x: -60, z: 40, angle: 0, health: 100, armour: 50, onFoot: true, carId: null, nearCar: null, moving: false, punchTimer: 0 },
     cars: [], peds: [], police: [],
     playerCar: null,
-    wanted: 0, wantedTimer: 0, sirenTimer: 0,
+    wanted: 0, wantedTimer: 0, wantedStage: 0, sirenTimer: 0, ramImmune: 0,
     stage: 1, stageTimer: CFG.stage2Time, missionDone: false, failed: false,
     reward: 0, rankUp: false, upgradeNote: '',
     money: save.money, respect: save.respect,

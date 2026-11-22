@@ -32,6 +32,21 @@ function paint() {
     camx: Math.round(S.cam.x), camz: Math.round(S.cam.z),
     wanted: S.wanted, stage: S.stage, screen: S.screen,
     deadPos: S.cars.filter((c) => c.dead).map((c) => [Math.round(c.x), Math.round(c.z)]),
+    ang: S.playerCar ? S.playerCar.angle : S.player.angle,
+    spd: S.playerCar ? Math.abs(S.playerCar.speed) : 0,
+    cond: S.playerCar ? Math.round(S.playerCar.health) : null,
+    hp: Math.round(S.player.health),
+    timer: S.stage === 2 ? Math.round(S.stageTimer) : null,
+    money: S.money,
+    near: (() => {
+      let best = null, bd = 1e9;
+      for (const c of S.cars) {
+        if (c.dead || c.police) continue;
+        const d = Math.hypot(c.x - S.player.x, c.z - S.player.z);
+        if (d < bd) { bd = d; best = c; }
+      }
+      return best ? { x: Math.round(best.x), z: Math.round(best.z), d: Math.round(bd) } : null;
+    })(),
   };
   if (S.screen === 'title') showTitle(S);
   else if (S.screen === 'results') showResults(S);
