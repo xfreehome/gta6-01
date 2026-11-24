@@ -1,8 +1,8 @@
 # CALA DORADA: 2.5D top-down open-world crime — 1 deep mission, 5-star CDPD dispatch, helicopter & roadblocks, carjacking, garage upgrades, minimap, saves, radio
 
-[![make.fun competition](https://img.shields.io/badge/make.fun-gta6--01-orange)](https://make.fun/competitions/gta6-01)
-[![make.fun rank](https://img.shields.io/badge/make.fun-rank-top--100-blue)](https://make.fun/competitions/gta6-01)
-[![make.fun reward](https://img.shields.io/badge/make.fun-reward-%241%2C666-green)](https://make.fun/competitions/gta6-01)
+[![make.fun · gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![rank](https://make.fun/badge/gta6-01/xfreehome/gta6-01/rank.svg)](https://make.fun/bounty/gta6-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
+[![reward](https://make.fun/badge/gta6-01/xfreehome/gta6-01/reward.svg)](https://make.fun/bounty/gta6-01?utm_source=github&utm_medium=readme&utm_campaign=gta6-01)
 
 2.5D top-down open-world crime in a fictional golden-hour coastal city. One deep
 mission — THE LAST BOAT, in 3 stages — under a 5-star CDPD dispatch with helicopter
